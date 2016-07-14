@@ -13,7 +13,9 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 			Remove,
 			LoopRemove,
 			RemoveHtml,
-			CustomTarget
+			CustomTarget,
+			Replace,
+			Case
 		}
 
 		public abstract Types Type { get; internal set; }
@@ -146,8 +148,34 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 		}
 	}
 
+	public class CharacterCasePageHandler : PageHandler
+	{
+		public override Types Type { get; internal set; } = Types.Case;
+		public bool ToUpper { get; set; } = false;
+
+		public override void Customize(Page p)
+		{
+			try
+			{
+				if (ToUpper)
+				{
+					p.Content = p.Content.ToUpper();
+				}
+				else
+				{
+					p.Content = p.Content.ToLower();
+				}
+			}
+			catch (Exception e)
+			{
+				throw new SpiderExceptoin("Rawtext Invalid.");
+			}
+		}
+	}
+
 	public class CustomTargetHandler : PageHandler
 	{
+		public bool Loop { get; set; } = true;
 		public bool DisableNewLine { get; set; } = false;
 		public string StartString { get; set; }
 		public string EndString { get; set; }
@@ -168,19 +196,52 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 					rawText = rawText.Replace("\r", "").Replace("\n", "").Replace("\t", "");
 				}
 				int start = 0;
-				while (rawText.IndexOf(StartString, start, StringComparison.Ordinal) != -1)
+				if (Loop)
 				{
-					int begin = rawText.IndexOf(StartString, start, StringComparison.Ordinal) + StartOffset;
-					int end = rawText.IndexOf(EndString, begin, StringComparison.Ordinal) + EndOffset;
-					start = end;
-
-					rawText = rawText.Insert(end, @"</div>");
-					rawText = rawText.Insert(begin, "<div class=\"" + TargetTag + "\">");
+					while (rawText.IndexOf(StartString, start, StringComparison.Ordinal) != -1)
+					{
+						rawText = AmendRawText(rawText, ref start);
+					}
+				}
+				else
+				{
+					rawText = AmendRawText(rawText, ref start);
 				}
 
 				p.Content = rawText;
 			}
 			catch
+			{
+				throw new SpiderExceptoin("Rawtext Invalid.");
+			}
+		}
+
+		private string AmendRawText(string rawText,ref int start)
+		{
+			int begin = rawText.IndexOf(StartString, start, StringComparison.Ordinal) + StartOffset;
+			int end = rawText.IndexOf(EndString, begin, StringComparison.Ordinal) + EndOffset;
+			start = end;
+
+			rawText = rawText.Insert(end, @"</div>");
+			rawText = rawText.Insert(begin, "<div class=\"" + TargetTag + "\">");
+
+			return rawText;
+		}
+	}
+
+	public class ReplacePageHandler : PageHandler
+	{
+		public override Types Type { get; internal set; } = Types.Replace;
+		public string OldValue { get; set; }
+		public string NewValue { get; set; }
+
+		public override void Customize(Page p)
+		{
+			try
+			{
+				p.Content = p.Content?.Replace(OldValue, NewValue);
+			}
+			catch (Exception e)
 			{
 				throw new SpiderExceptoin("Rawtext Invalid.");
 			}

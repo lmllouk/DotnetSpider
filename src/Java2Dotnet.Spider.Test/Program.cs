@@ -16,6 +16,7 @@ using System.Collections.Generic;
 using Java2Dotnet.Spider.Common;
 using System.Text.RegularExpressions;
 using System.Linq;
+using Java2Dotnet.Spider.Extension.Configuration;
 using Java2Dotnet.Spider.Extension.Configuration.Json;
 
 namespace Java2Dotnet.Spider.Test
@@ -24,9 +25,12 @@ namespace Java2Dotnet.Spider.Test
 	{
 		public static void Main(string[] args)
 		{
-			JdSkuSampleSpider spiderBuilder = new JdSkuSampleSpider();
-			spiderBuilder.Run("rerun");
-
+			//var start = DateTime.Now;
+			//CnblogsSpider spiderBuilder = new CnblogsSpider();
+			//spiderBuilder.Run("rerun");
+			//var end = DateTime.Now;
+			//Console.WriteLine((end - start).TotalMilliseconds);
+			//Console.Read();
 			//SpiderExample.Run();
 			//JdSkuSampleSpider spiderBuilder = new JdSkuSampleSpider();
 			//var context = spiderBuilder.GetBuilder().Context;

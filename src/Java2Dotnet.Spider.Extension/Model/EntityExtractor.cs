@@ -15,10 +15,10 @@ namespace Java2Dotnet.Spider.Extension.Model
 {
 	public class EntityExtractor : IEntityExtractor
 	{
-		private readonly Entity _entityDefine;
+		private readonly EntityMetadata _entityDefine;
 		private readonly List<EnviromentValue> _enviromentValues;
 
-		public EntityExtractor(string entityName, List<EnviromentValue> enviromentValues, Entity entityDefine)
+		public EntityExtractor(string entityName, List<EnviromentValue> enviromentValues, EntityMetadata entityDefine)
 		{
 			_entityDefine = entityDefine;
 
@@ -144,11 +144,11 @@ namespace Java2Dotnet.Spider.Extension.Model
 			}
 		}
 
-		private JObject ProcessSingle(Page page, ISelectable item, Entity entityDefine, int index)
+		private JObject ProcessSingle(Page page, ISelectable item, EntityMetadata entityDefine, int index)
 		{
 			JObject dataObject = new JObject();
 
-			foreach (var field in entityDefine.Fields)
+			foreach (var field in entityDefine.Entity.Fields)
 			{
 				var fieldValue = ExtractField(item, page, field, index);
 				if (fieldValue != null)
@@ -161,32 +161,39 @@ namespace Java2Dotnet.Spider.Extension.Model
 
 			if (stopping != null)
 			{
-				var field = entityDefine.Fields.First(f => f.Name == stopping.PropertyName);
-				var datatype = field.DataType;
-				bool isEntity = VerifyIfEntity(datatype);
-				if (isEntity)
+				var field = entityDefine.Entity.Fields.First(f => f.Name == stopping.PropertyName) as Field;
+				if (field != null)
 				{
-					throw new SpiderExceptoin("Can't compare with object.");
-				}
-				stopping.DataType = datatype.ToString().ToLower();
-				string value = dataObject.SelectToken($"$.{stopping.PropertyName}")?.ToString();
-				if (string.IsNullOrEmpty(value))
-				{
-					page.MissTargetUrls = true;
-				}
-				else
-				{
-					if (stopping.NeedStop(value))
+					var datatype = field.DataType;
+					bool isEntity = VerifyIfEntity(datatype);
+					if (isEntity)
+					{
+						throw new SpiderExceptoin("Can't compare with object.");
+					}
+					stopping.DataType = datatype.ToString().ToLower();
+					string value = dataObject.SelectToken($"$.{stopping.PropertyName}")?.ToString();
+					if (string.IsNullOrEmpty(value))
 					{
 						page.MissTargetUrls = true;
 					}
+					else
+					{
+						if (stopping.NeedStop(value))
+						{
+							page.MissTargetUrls = true;
+						}
+					}
+				}
+				else
+				{
+					throw new SpiderExceptoin("Stopping cannot be EntityMetaData.");
 				}
 			}
 
 			return dataObject.Children().Count() > 0 ? dataObject : null;
 		}
 
-		private dynamic ExtractField(ISelectable item, Page page, Field field, int index)
+		private dynamic ExtractField(ISelectable item, Page page, DataToken field, int index)
 		{
 			ISelector selector = SelectorUtil.GetSelector(field.Selector);
 			if (selector == null)
@@ -194,13 +201,14 @@ namespace Java2Dotnet.Spider.Extension.Model
 				return null;
 			}
 
-			List<Formatter.Formatter> formatters = GenerateFormatter(field.Formatters);
+			var f = field as Field;
+			List<Formatter.Formatter> formatters = GenerateFormatter(f?.Formatters);
 
-			bool isEntity = field.Fields != null && field.Fields.Count > 0;
+			bool isEntity = field is Entity;
 
 			if (!isEntity)
 			{
-				string tmpValue;
+                string tmpValue;
 				if (selector is EnviromentSelector)
 				{
 					var enviromentSelector = selector as EnviromentSelector;
@@ -213,20 +221,15 @@ namespace Java2Dotnet.Spider.Extension.Model
 				}
 				else
 				{
+					bool needPlainText = (((Field)field).Option == PropertyExtractBy.ValueOption.PlainText);
 					if (field.Multi)
 					{
 						var propertyValues = item.SelectList(selector).Nodes();
-						if (field.Option == PropertyExtractBy.ValueOption.Count)
-						{
-							var tempValue = propertyValues != null ? propertyValues.Count.ToString() : "-1";
-							return tempValue;
-						}
-						else
-						{
+
 							List<string> results = new List<string>();
 							foreach (var propertyValue in propertyValues)
 							{
-								string tmp = propertyValue.GetValue(field.Option == PropertyExtractBy.ValueOption.PlainText);
+								string tmp = propertyValue.GetValue(needPlainText);
 								foreach (var formatter in formatters)
 								{
 									tmp = formatter.Formate(tmp);
@@ -235,16 +238,17 @@ namespace Java2Dotnet.Spider.Extension.Model
 							}
 							return new JArray(results);
 						}
-					}
 					else
 					{
-						tmpValue = item.Select(selector)?.GetValue(field.Option == PropertyExtractBy.ValueOption.PlainText);
-						if (field.Option == PropertyExtractBy.ValueOption.Count)
+						bool needCount = (((Field)field).Option == PropertyExtractBy.ValueOption.Count);
+						if (needCount)
 						{
-							return tmpValue == null ? 0 : 1;
+							var propertyValues = item.SelectList(selector).Nodes();
+							return propertyValues != null ? propertyValues.Count.ToString() : "-1";
 						}
 						else
 						{
+							tmpValue = item.Select(selector)?.GetValue(needPlainText);
 							tmpValue = formatters.Aggregate(tmpValue, (current, formatter) => formatter.Formate(current));
 							return tmpValue;
 						}
@@ -262,7 +266,7 @@ namespace Java2Dotnet.Spider.Extension.Model
 					{
 						JObject obj = new JObject();
 
-						foreach (var child in field.Fields)
+						foreach (var child in ((Entity)field).Fields)
 						{
 							obj.Add(child.Name, ExtractField(selectable, page, child, 0));
 						}
@@ -274,7 +278,7 @@ namespace Java2Dotnet.Spider.Extension.Model
 				{
 					JObject obj = new JObject();
 					var selectable = item.Select(selector);
-					foreach (var child in field.Fields)
+					foreach (var child in ((Entity)field).Fields)
 					{
 						obj.Add(child.Name, ExtractField(selectable, page, field, 0));
 					}
